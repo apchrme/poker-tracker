@@ -8,6 +8,10 @@
 		"binding": "ASSETS",
 		"directory": ".svelte-kit/cloudflare"
 	},
+	"route": {
+		"pattern": "poker.phoxiv.org",
+		"custom_domain": true
+	},
 	"workers_dev": true,
 	"preview_urls": true,
 	"d1_databases": [
