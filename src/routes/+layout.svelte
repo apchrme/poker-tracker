@@ -6,4 +6,6 @@
 </script>
 
 <ModeWatcher />
+<div class="px-2">
 {@render children()}
+</div>

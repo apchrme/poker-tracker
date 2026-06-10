@@ -237,13 +237,13 @@
 												onclick={() => openTxModal(player.id, 'buyin')}
 												class="rounded-md bg-destructive/10 px-2.5 py-1 text-xs font-medium text-destructive transition hover:bg-destructive/20"
 											>
-												Buy In
+												-
 											</button>
 											<button
 												onclick={() => openTxModal(player.id, 'cashout')}
 												class="rounded-md bg-emerald-500/10 px-2.5 py-1 text-xs font-medium text-emerald-700 transition hover:bg-emerald-500/20 dark:text-emerald-400"
 											>
-												Cash Out
+												+
 											</button>
 										</div>
 									</td>
@@ -259,8 +259,8 @@
 				{#each [
 					{ label: 'Players', value: data.players.length },
 					{ label: 'Transactions', value: data.transactions.length },
-					{ label: 'Total chips in play', value: data.players.reduce((acc, p) => acc + Math.abs(p.balance < 0 ? p.balance : 0), 0) }
-				] as stat}
+					{ label: 'Total chips in play', value: -data.players.reduce((acc, p) => acc + p.balance, 0) }
+				] as stat (stat)}
 					<div class="rounded-xl border border-border bg-card p-3 text-center">
 						<div class="font-mono text-xl font-bold text-foreground">{stat.value}</div>
 						<div class="mt-0.5 text-xs text-muted-foreground">{stat.label}</div>
@@ -322,11 +322,12 @@
 	></div>
 
 	<!-- Dialog -->
+
 	<div
 		role="dialog"
 		aria-modal="true"
 		aria-label="{txType === 'buyin' ? 'Buy In' : 'Cash Out'} for {txPlayer?.name}"
-		class="fixed left-1/2 top-1/2 z-50 w-full max-w-sm -translate-x-1/2 -translate-y-1/2 rounded-2xl border border-border bg-card p-6 shadow-2xl"
+		class="fixed left-1/2 top-1/2 z-50 w-[90vw] max-w-sm -translate-x-1/2 -translate-y-1/2 rounded-2xl border border-border bg-card p-6 shadow-2xl"
 	>
 		<div class="mb-5 flex items-start justify-between">
 			<div>
@@ -352,7 +353,7 @@
 		<div class="space-y-4">
 			<!-- Toggle type -->
 			<div class="flex rounded-lg border border-border p-1">
-				{#each (['buyin', 'cashout'] as const) as t}
+				{#each (['buyin', 'cashout'] as const) as t (t)}
 					<button
 						onclick={() => { txType = t; txError = ''; }}
 						class="flex-1 rounded-md py-1.5 text-sm font-medium transition {txType === t

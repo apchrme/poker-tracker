@@ -1,6 +1,6 @@
 import { json, error } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
-import { players, transactions } from '$lib/server/db/schema';
+import { rooms, players, transactions } from '$lib/server/db/schema';
 import { eq } from 'drizzle-orm';
 
 export const GET: RequestHandler = async ({ params, locals }) => {
@@ -12,8 +12,11 @@ export const GET: RequestHandler = async ({ params, locals }) => {
 
 	// Check expiry: rooms expire after 7 days
 	const expiresAt = new Date(room.createdAt);
-	expiresAt.setDate(expiresAt.getDate() + 7);
-	if (new Date() > expiresAt) throw error(404, 'Room has expired');
+	expiresAt.setMilliseconds(expiresAt.getMilliseconds() + 7*86400*1000);
+	if (new Date() > expiresAt) {
+		await db.delete(rooms).where(eq(rooms.id, id));
+		throw error(404, 'This room has expired');
+	}
 
 	const roomPlayers = await db.select().from(players).where(eq(players.roomId, id));
 	const roomTransactions = await db

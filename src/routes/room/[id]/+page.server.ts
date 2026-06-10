@@ -10,8 +10,8 @@ export const load = async ({ params, locals }) => {
 	if (!room) throw error(404, 'Room not found');
 
 	// Check expiry: rooms expire after 7 days
-	const expiresAt = new Date((room.createdAt as unknown as number));
-	expiresAt.setDate(expiresAt.getDate() + 7);
+	const expiresAt = new Date(room.createdAt);
+	expiresAt.setMilliseconds(expiresAt.getMilliseconds() + 7*86400*1000);
 	if (new Date() > expiresAt) {
 		await db.delete(rooms).where(eq(rooms.id, id));
 		throw error(404, 'This room has expired');
