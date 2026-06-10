@@ -3,6 +3,7 @@
 	import { invalidateAll } from '$app/navigation';
 	import type { PageData } from './$types';
 	import { Badge } from '$lib/components/ui/badge';
+	import DarkModeButton from '$lib/components/buttons/DarkModeButton.svelte';
 
 	let { data }: { data: PageData } = $props();
 
@@ -162,6 +163,7 @@
 					</p>
 				</div>
 			</div>
+			<div class="flex items-center gap-2">
 			<button
 				onclick={copyLink}
 				class="inline-flex items-center gap-1.5 rounded-lg border border-border bg-card px-3 py-1.5 text-xs font-medium text-foreground transition hover:bg-muted"
@@ -172,6 +174,8 @@
 					Share link
 				{/if}
 			</button>
+			<DarkModeButton />
+			</div>
 		</div>
 	</header>
 

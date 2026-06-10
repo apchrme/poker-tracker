@@ -1,20 +1,19 @@
 import { error } from '@sveltejs/kit';
-import type { PageServerLoad } from '../../$types';
-import { getDb } from '$lib/server/db';
-import { players, transactions } from '$lib/server/db/schema';
+import { rooms, players, transactions } from '$lib/server/db/schema';
 import { eq } from 'drizzle-orm';
 
-export const load: PageServerLoad = async ({ params, platform }) => {
-	const db = getDb(platform!.env.DB);
+export const load = async ({ params, locals }) => {
+	const db = locals.db;
 	const { id } = params;
 
 	const room = await db.query.rooms.findFirst({ where: (r, { eq }) => eq(r.id, id) });
 	if (!room) throw error(404, 'Room not found');
 
 	// Check expiry: rooms expire after 7 days
-	const expiresAt = new Date((room.createdAt as unknown as number) + 86400*7);
+	const expiresAt = new Date((room.createdAt as unknown as number));
 	expiresAt.setDate(expiresAt.getDate() + 7);
 	if (new Date() > expiresAt) {
+		await db.delete(rooms).where(eq(rooms.id, id));
 		throw error(404, 'This room has expired');
 	}
 

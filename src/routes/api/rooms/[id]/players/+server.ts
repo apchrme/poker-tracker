@@ -1,10 +1,9 @@
 import { json, error } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
-import { getDb } from '$lib/server/db';
 import { players } from '$lib/server/db/schema';
 
-export const POST: RequestHandler = async ({ params, request, platform }) => {
-	const db = getDb(platform!.env.DB);
+export const POST: RequestHandler = async ({ params, request, locals }) => {
+	const db = locals.db;
 	const { id } = params;
 
 	const room = await db.query.rooms.findFirst({ where: (r, { eq }) => eq(r.id, id) });

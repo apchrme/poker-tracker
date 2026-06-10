@@ -1,19 +1,18 @@
 import { json } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
-import { getDb } from '$lib/server/db';
 import { rooms } from '$lib/server/db/schema';
 
 function generateRoomId(): string {
 	const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'; // skip confusable chars
 	let id = '';
-	for (let i = 0; i < 6; i++) {
+	for (let i = 0; i < 4; i++) {
 		id += chars[Math.floor(Math.random() * chars.length)];
 	}
 	return id;
 }
 
-export const POST: RequestHandler = async ({ platform }) => {
-	const db = getDb(platform!.env.DB);
+export const POST: RequestHandler = async ({ platform, locals }) => {
+	const db = locals.db;
 
 	// Generate a unique room ID
 	let id = generateRoomId();
