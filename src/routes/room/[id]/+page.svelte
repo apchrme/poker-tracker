@@ -3,7 +3,9 @@
 	import { invalidateAll } from '$app/navigation';
 	import type { PageData } from './$types';
 	import { Badge } from '$lib/components/ui/badge';
+	import { Button } from '$lib/components/ui/button/index';
 	import DarkModeButton from '$lib/components/buttons/DarkModeButton.svelte';
+	import { Minus, Plus } from '@lucide/svelte';
 
 	let { data }: { data: PageData } = $props();
 
@@ -141,7 +143,7 @@
 <svelte:window onkeydown={handleKeydown} />
 
 <svelte:head>
-	<title>Room {roomId} · Poker Tracker</title>
+	<title>Room {roomId} — Poker Tracker</title>
 </svelte:head>
 
 <!-- ─── Page ────────────────────────────────────────────────────────────────── -->
@@ -233,18 +235,20 @@
 									</td>
 									<td class="px-4 py-3 text-right">
 										<div class="flex justify-end gap-1.5">
-											<button
+											<Button
 												onclick={() => openTxModal(player.id, 'buyin')}
-												class="rounded-md bg-destructive/10 px-2.5 py-1 text-xs font-medium text-destructive transition hover:bg-destructive/20"
+												class="bg-destructive/10 font-medium text-destructive transition hover:bg-destructive/20"
+												size="icon"
 											>
-												-
-											</button>
-											<button
+												<Minus />
+											</Button>
+											<Button
 												onclick={() => openTxModal(player.id, 'cashout')}
-												class="rounded-md bg-emerald-500/10 px-2.5 py-1 text-xs font-medium text-emerald-700 transition hover:bg-emerald-500/20 dark:text-emerald-400"
+												class="bg-emerald-500/10 font-medium text-emerald-700 transition hover:bg-emerald-500/20 dark:text-emerald-400"
+												size="icon"
 											>
-												+
-											</button>
+												<Plus />
+											</Button>
 										</div>
 									</td>
 								</tr>
@@ -341,13 +345,14 @@
 					</span>
 				</p>
 			</div>
-			<button
+			<Button
 				onclick={closeTxModal}
-				class="rounded-lg p-1 text-muted-foreground transition hover:bg-muted hover:text-foreground"
+				size="icon-lg"
 				aria-label="Close"
+				variant="outline"
 			>
 				✕
-			</button>
+			</Button>
 		</div>
 
 		<div class="space-y-4">
