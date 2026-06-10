@@ -1,0 +1,21 @@
+{
+	"$schema": "./node_modules/wrangler/config-schema.json",
+	"name": "poker-tracker",
+	"compatibility_date": "2026-06-10",
+	"compatibility_flags": ["nodejs_als"],
+	"main": ".svelte-kit/cloudflare/_worker.js",
+	"assets": {
+		"binding": "ASSETS",
+		"directory": ".svelte-kit/cloudflare"
+	},
+	"workers_dev": true,
+	"preview_urls": true,
+	"d1_databases": [
+		{
+			"binding": "DB",
+			"database_name": "poker-tracker",
+			"database_id": "dfe5b940-700d-4079-98d5-517fe8098349",
+			"migrations_dir": "./src/lib/server/db/migrations"
+		}
+	]
+}
