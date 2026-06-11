@@ -10,7 +10,7 @@ export const POST: RequestHandler = async ({ params, request, locals }) => {
 	const room = await db.query.rooms.findFirst({ where: (r, { eq }) => eq(r.id, id) });
 	if (!room) throw error(404, 'Room not found');
 
-	const body = await request.json();
+	const body: {playerId: string, type: string, amount: number} = await request.json();
 	const { playerId, type, amount } = body;
 
 	if (!playerId || typeof playerId !== 'number') throw error(400, 'Valid playerId required');
