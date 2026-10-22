@@ -4,8 +4,9 @@ A small web app for tracking buy-ins and cash-outs at poker home games. Live at
 [poker.phoxiv.org](https://poker.phoxiv.org).
 
 There are no accounts. Someone creates a **room**, which gets a random 4-character code, and
-shares the link. Anyone with the link can add players and record transactions. Rooms are deleted
-7 days after they're created.
+shares the link. Anyone with the link can add and delete players, record transactions, and set
+the room's chip-to-dollar rate. Everyone with the room open sees changes within a few seconds.
+Rooms are deleted 7 days after they're created.
 
 ## Stack
 
@@ -62,6 +63,7 @@ src/
 ├── app.d.ts                 # App.Locals typing
 ├── lib/
 │   ├── api.ts               # Client helper for reading API error messages
+│   ├── currency.ts          # Chip ↔ cent conversion, amount formatting, chips/$ display cookie
 │   ├── components/
 │   │   ├── buttons/         # App-specific components (dark-mode toggle)
 │   │   └── ui/              # shadcn-svelte primitives (generated; add with `bunx shadcn-svelte add`)
@@ -71,7 +73,7 @@ src/
 │       │   ├── schema.ts    # Drizzle schema: rooms, players, transactions
 │       │   └── migrations/  # Generated SQL migrations (applied by Wrangler)
 │       ├── http.ts          # readJsonBody(): JSON body parsing with 400s for bad input
-│       └── rooms.ts         # Room TTL, getActiveRoom(), deleteExpiredRooms()
+│       └── rooms.ts         # Room TTL, getActiveRoom(), deleteExpiredRooms(), bumpRoomVersion()
 └── routes/
     ├── +page.svelte         # Landing page: create or join a room
     ├── +error.svelte        # Error page (unknown/expired rooms land here)
@@ -91,7 +93,7 @@ The adapter provides this module in dev too. There is no `event.platform`.
 
 | Table          | Columns                                                                        |
 | -------------- | ------------------------------------------------------------------------------ |
-| `rooms`        | `id` (4-char code, PK), `created_at`                                           |
+| `rooms`        | `id` (4-char code, PK), `rate_chips`, `rate_cents`, `version`, `created_at`    |
 | `players`      | `id`, `room_id` → rooms, `name`, `balance`, `created_at`                       |
 | `transactions` | `id`, `room_id` → rooms, `player_id` → players, `type`, `amount`, `created_at` |
 
@@ -99,8 +101,28 @@ The adapter provides this module in dev too. There is no `event.platform`.
 - `players.balance` is a running total (cash-outs minus buy-ins), so a negative balance means
   the player is down. It's updated in the same D1 `batch()` as the transaction insert, so the
   two can't drift apart.
-- Foreign keys cascade on delete, so deleting a room removes its players and transactions.
+- Foreign keys cascade on delete, so deleting a room removes its players and transactions, and
+  deleting a player removes their transactions.
+- `rooms.version` goes up by one with every change to the room's data (players, transactions,
+  rate). Each endpoint bumps it with `bumpRoomVersion()` in the same `batch()` as the change.
+  See [Live sync](#live-sync).
 - Timestamps are Unix seconds. Drizzle maps them to `Date`.
+
+### Chips and dollars
+
+Everything is stored in chips. Dollars are only a way of viewing and entering amounts.
+
+- A room's rate is `rate_chips` chips = `rate_cents` cents (e.g. 1000 chips = 2000 cents for
+  "1000 chips = $20"). Storing two integers keeps conversions exact. Both are `NULL` until
+  someone sets a rate in the room's settings, and dollars aren't available until then.
+- Balances, stats and the transaction log are shown in the unit picked with the Chips / $
+  toggle. The choice is kept in a `display-unit` cookie (not localStorage) so the server
+  renders the page in that unit, and it applies to every room.
+- A buy-in or cash-out entered in dollars is converted to chips in the browser before it's
+  sent, rounding to the nearest whole chip. The dialog shows the chip amount that will be
+  recorded and says when it was rounded. The API only accepts chips.
+- Changing the rate re-values every existing amount, since transactions don't store the rate
+  in force when they were recorded.
 
 ### Room lifecycle
 
@@ -116,19 +138,41 @@ The adapter provides this module in dev too. There is no `event.platform`.
 All endpoints are JSON. Errors use SvelteKit's shape, `{ "message": "..." }`, with a 4xx/5xx
 status. Like any SvelteKit app, POSTs must come from the same origin (CSRF protection).
 
-| Method | Path                          | Body                                               | Response                                     |
-| ------ | ----------------------------- | -------------------------------------------------- | -------------------------------------------- |
-| POST   | `/api/rooms`                  | none                                               | `201 { id }`                                 |
-| GET    | `/api/rooms/:id`              | none                                               | `200 { room: { id, createdAt, expiresAt } }` |
-| POST   | `/api/rooms/:id/players`      | `{ name }` (1–50 chars after trimming)             | `201` the new player                         |
-| POST   | `/api/rooms/:id/transactions` | `{ playerId, type: "buyin" \| "cashout", amount }` | `201 { transaction, player }`                |
+| Method | Path                               | Body                                               | Response                      |
+| ------ | ---------------------------------- | -------------------------------------------------- | ----------------------------- |
+| POST   | `/api/rooms`                       | none                                               | `201 { id }`                  |
+| GET    | `/api/rooms/:id`                   | none                                               | `200 { room }`                |
+| PATCH  | `/api/rooms/:id`                   | `{ rateChips, rateCents }`                         | `200 { room }`                |
+| POST   | `/api/rooms/:id/players`           | `{ name }` (1–50 chars after trimming)             | `201` the new player          |
+| DELETE | `/api/rooms/:id/players/:playerId` | none                                               | `204`                         |
+| POST   | `/api/rooms/:id/transactions`      | `{ playerId, type: "buyin" \| "cashout", amount }` | `201 { transaction, player }` |
+
+- `room` is `{ id, rateChips, rateCents, version, createdAt, expiresAt }`.
+- `PATCH` takes the rate as positive whole numbers of chips and cents, or both `null` to remove
+  it.
+- `DELETE` on a player also deletes their transactions. It returns `404` if the player isn't in
+  this room.
+- `amount` is always in chips.
 
 Unknown or expired rooms return `404` from every room endpoint.
 
 The room page doesn't use the API to load data. Its server `load` function
 ([`room/[id]/+page.server.ts`](src/routes/room/[id]/+page.server.ts)) queries D1 directly and
-re-runs (`invalidateAll()`) after each change. Other people's changes show up when you reload
-the page; there's no live sync.
+re-runs (`invalidateAll()`) after each change.
+
+### Live sync
+
+Other people's changes reach an open room page by polling, not WebSockets (which would need
+Durable Objects):
+
+- Every 3 seconds the page fetches `GET /api/rooms/:id`, a single-row read, and compares
+  `room.version` with the version it last loaded. Only if it differs does it call
+  `invalidateAll()` to reload players and transactions.
+- Polling pauses while the tab is hidden and runs immediately when it becomes visible again.
+- Failed polls (e.g. a dropped connection) are ignored and retried on the next tick. A `404`
+  reloads the page, which then shows the expired-room error.
+- If someone deletes a player while you have that player's buy-in/cash-out or delete dialog
+  open, the dialog closes.
 
 ## Deployment
 
