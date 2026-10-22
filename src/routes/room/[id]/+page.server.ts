@@ -1,39 +1,33 @@
-import { error } from '@sveltejs/kit';
-import { rooms, players, transactions } from '$lib/server/db/schema';
-import { eq } from 'drizzle-orm';
+import { desc, eq } from 'drizzle-orm';
+import type { PageServerLoad } from './$types';
+import { players, transactions } from '#lib/server/db/schema.js';
+import { getActiveRoom, roomExpiresAt } from '#lib/server/rooms.js';
 
-export const load = async ({ params, locals }) => {
-	const db = locals.db;
-	const { id } = params;
+export const load: PageServerLoad = async ({ params, locals }) => {
+	const { db } = locals;
+	const room = await getActiveRoom(db, params.id);
 
-	const room = await db.query.rooms.findFirst({ where: (r, { eq }) => eq(r.id, id) });
-	if (!room) throw error(404, 'Room not found');
-
-	// Check expiry: rooms expire after 7 days
-	const expiresAt = new Date(room.createdAt);
-	expiresAt.setMilliseconds(expiresAt.getMilliseconds() + 7*86400*1000);
-	if (new Date() > expiresAt) {
-		await db.delete(rooms).where(eq(rooms.id, id));
-		throw error(404, 'This room has expired');
-	}
-
-	const roomPlayers = await db.select().from(players).where(eq(players.roomId, id));
-	const roomTransactions = await db
-		.select({
-			id: transactions.id,
-			playerId: transactions.playerId,
-			type: transactions.type,
-			amount: transactions.amount,
-			createdAt: transactions.createdAt,
-			playerName: players.name
-		})
-		.from(transactions)
-		.leftJoin(players, eq(transactions.playerId, players.id))
-		.where(eq(transactions.roomId, id))
-		.orderBy(transactions.createdAt);
+	// One round trip to D1 for both queries.
+	const [roomPlayers, roomTransactions] = await db.batch([
+		db.select().from(players).where(eq(players.roomId, room.id)).orderBy(desc(players.balance)),
+		db
+			.select({
+				id: transactions.id,
+				playerId: transactions.playerId,
+				type: transactions.type,
+				amount: transactions.amount,
+				createdAt: transactions.createdAt,
+				playerName: players.name
+			})
+			.from(transactions)
+			.innerJoin(players, eq(transactions.playerId, players.id))
+			.where(eq(transactions.roomId, room.id))
+			// Newest first. `id` rather than `createdAt`, which only has 1-second resolution.
+			.orderBy(desc(transactions.id))
+	]);
 
 	return {
-		room: { ...room, expiresAt: expiresAt.toISOString() },
+		room: { ...room, expiresAt: roomExpiresAt(room) },
 		players: roomPlayers,
 		transactions: roomTransactions
 	};

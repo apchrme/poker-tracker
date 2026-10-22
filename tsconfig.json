@@ -1,9 +1,9 @@
 {
-	"extends": "./.svelte-kit/tsconfig.json",
+	"extends": "$app/tsconfig",
 	"compilerOptions": {
 		"rewriteRelativeImportExtensions": true,
 		"allowJs": true,
-		"checkJs": true,
+		"checkJs": false, // worker-configuration.d.ts imports the built worker bundle; don't type-check it
 		"esModuleInterop": true,
 		"forceConsistentCasingInFileNames": true,
 		"resolveJsonModule": true,
@@ -11,6 +11,7 @@
 		"sourceMap": true,
 		"strict": true,
 		"moduleResolution": "bundler",
-		"types": ["./worker-configuration.d.ts"]
-	}
+		"types": ["$app/types", "./worker-configuration.d.ts"]
+	},
+	"include": ["src", "vite.config.ts", "drizzle.config.ts", "worker-configuration.d.ts"]
 }

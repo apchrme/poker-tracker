@@ -1,18 +1,19 @@
 <script lang="ts">
-	import { page } from '$app/state';
 	import { invalidateAll } from '$app/navigation';
 	import { resolve } from '$app/paths';
 	import type { PageData } from './$types';
-	import { Badge } from '$lib/components/ui/badge';
-	import { Button } from '$lib/components/ui/button';
-	import { Input } from '$lib/components/ui/input';
-	import * as Dialog from '$lib/components/ui/dialog';
-	import DarkModeButton from '$lib/components/buttons/DarkModeButton.svelte';
+	import { responseError } from '#lib/api.js';
+	import { Badge } from '#lib/components/ui/badge/index.js';
+	import { Button } from '#lib/components/ui/button/index.js';
+	import { Input } from '#lib/components/ui/input/index.js';
+	import * as Dialog from '#lib/components/ui/dialog/index.js';
+	import DarkModeButton from '#lib/components/buttons/DarkModeButton.svelte';
 	import { Minus, Plus, Copy, Check } from '@lucide/svelte';
 
 	let { data }: { data: PageData } = $props();
 
-	const roomId = $derived(page.params.id);
+	// Canonical (uppercase) code, even if the URL was typed in lowercase.
+	const roomId = $derived(data.room.id);
 
 	// ─── Add Player ───────────────────────────────────────────────────────────
 	let newPlayerName = $state('');
@@ -30,10 +31,7 @@
 				headers: { 'Content-Type': 'application/json' },
 				body: JSON.stringify({ name })
 			});
-			if (!res.ok) {
-				const err: {message: string} = await res.json();
-				throw new Error(err.message ?? 'Failed');
-			}
+			if (!res.ok) throw await responseError(res, 'Could not add player.');
 			newPlayerName = '';
 			await invalidateAll();
 		} catch (e: unknown) {
@@ -48,22 +46,28 @@
 	let txDialogOpen = $state(false);
 	let txType = $state<TxType>('buyin');
 	let txPlayerId = $state<number | null>(null);
-	let txAmount = $state('');
+	// bind:value on a number input yields a number, or null when empty.
+	let txAmount = $state<number | null>(null);
 	let txSubmitting = $state(false);
 	let txError = $state('');
+
+	// Whole chips only: previously "1.5" was silently recorded as 1.
+	const txAmountValid = $derived(
+		typeof txAmount === 'number' && Number.isSafeInteger(txAmount) && txAmount > 0
+	);
 
 	function openTxDialog(playerId: number, type: TxType) {
 		txPlayerId = playerId;
 		txType = type;
-		txAmount = '';
+		txAmount = null;
 		txError = '';
 		txDialogOpen = true;
 	}
 
 	async function submitTransaction() {
-		const amount = parseInt(txAmount, 10);
-		if (!txPlayerId || isNaN(amount) || amount <= 0) {
-			txError = 'Enter a valid positive amount.';
+		if (txSubmitting) return;
+		if (!txPlayerId || !txAmountValid) {
+			txError = 'Enter a whole number of chips greater than 0.';
 			return;
 		}
 		txSubmitting = true;
@@ -72,12 +76,9 @@
 			const res = await fetch(`/api/rooms/${roomId}/transactions`, {
 				method: 'POST',
 				headers: { 'Content-Type': 'application/json' },
-				body: JSON.stringify({ playerId: txPlayerId, type: txType, amount })
+				body: JSON.stringify({ playerId: txPlayerId, type: txType, amount: txAmount })
 			});
-			if (!res.ok) {
-				const err: Error = await res.json();
-				throw new Error(err.message ?? 'Failed');
-			}
+			if (!res.ok) throw await responseError(res, 'Could not record transaction.');
 			txDialogOpen = false;
 			await invalidateAll();
 		} catch (e: unknown) {
@@ -98,27 +99,38 @@
 		return 'text-muted-foreground';
 	}
 
-	function formatDate(ts: unknown): string {
-		let d: Date;
-		if (ts instanceof Date) d = ts;
-		else if (typeof ts === 'number') d = new Date(ts * 1000);
-		else d = new Date(ts as string);
-		return d.toLocaleString(undefined, { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
+	// SvelteKit serialises Dates from the load function, so these arrive as Date objects.
+	function formatDate(d: Date): string {
+		return d.toLocaleString(undefined, {
+			month: 'short',
+			day: 'numeric',
+			hour: '2-digit',
+			minute: '2-digit'
+		});
 	}
 
 	let copied = $state(false);
-	function copyLink() {
-		navigator.clipboard.writeText(window.location.href);
+	async function copyLink() {
+		try {
+			await navigator.clipboard.writeText(window.location.href);
+		} catch {
+			return; // Clipboard unavailable (e.g. insecure context); don't claim success.
+		}
 		copied = true;
 		setTimeout(() => (copied = false), 2000);
 	}
 
-	const sortedPlayers = $derived([...data.players].sort((a, b) => b.balance - a.balance));
-	const recentTransactions = $derived([...data.transactions].reverse().slice(0, 50));
+	// Players arrive sorted by balance and transactions newest-first from the server.
+	const recentTransactions = $derived(data.transactions.slice(0, 50));
+	const stats = $derived([
+		{ label: 'Players', value: data.players.length },
+		{ label: 'Transactions', value: data.transactions.length },
+		{ label: 'Total chips in play', value: -data.players.reduce((acc, p) => acc + p.balance, 0) }
+	]);
 	const txPlayer = $derived(txPlayerId ? data.players.find((p) => p.id === txPlayerId) : null);
 	const txNewBalance = $derived(
-		txAmount && parseInt(txAmount) > 0
-			? (txPlayer?.balance ?? 0) + (txType === 'buyin' ? -parseInt(txAmount) : parseInt(txAmount))
+		txAmountValid && txAmount !== null
+			? (txPlayer?.balance ?? 0) + (txType === 'buyin' ? -txAmount : txAmount)
 			: null
 	);
 </script>
@@ -132,13 +144,13 @@
 	<header class="sticky top-0 z-10 border-b border-border bg-background/95 backdrop-blur">
 		<div class="mx-auto flex max-w-3xl items-center justify-between px-4 py-3">
 			<div class="flex items-center gap-3">
-				<a href={resolve("/")} class="text-xl">♠</a>
+				<a href={resolve('/')} class="text-xl">♠</a>
 				<div>
-					<h1 class="font-heading text-base font-semibold leading-none text-foreground">
+					<h1 class="font-heading text-base leading-none font-semibold text-foreground">
 						Room <span class="font-mono tracking-widest text-primary">{roomId}</span>
 					</h1>
 					<p class="mt-0.5 text-xs text-muted-foreground">
-						Expires {new Date(data.room.expiresAt).toLocaleDateString()}
+						Expires {data.room.expiresAt.toLocaleDateString()}
 					</p>
 				</div>
 			</div>
@@ -181,7 +193,9 @@
 
 		<!-- ─── Players Table ──────────────────────────────────────────────── -->
 		{#if data.players.length === 0}
-			<div class="rounded-xl border border-dashed border-border p-10 text-center text-sm text-muted-foreground">
+			<div
+				class="rounded-xl border border-dashed border-border p-10 text-center text-sm text-muted-foreground"
+			>
 				No players yet. Add one above to get started.
 			</div>
 		{:else}
@@ -190,17 +204,23 @@
 				<div class="overflow-hidden rounded-xl border border-border bg-card">
 					<table class="w-full text-sm">
 						<thead>
-							<tr class="border-b border-border text-xs font-medium uppercase tracking-wider text-muted-foreground">
+							<tr
+								class="border-b border-border text-xs font-medium tracking-wider text-muted-foreground uppercase"
+							>
 								<th class="px-4 py-3 text-left">Player</th>
 								<th class="px-4 py-3 text-right">Balance</th>
 								<th class="px-4 py-3 text-right">Actions</th>
 							</tr>
 						</thead>
 						<tbody>
-							{#each sortedPlayers as player (player.id)}
-								<tr class="border-b border-border/50 last:border-0 transition hover:bg-muted/30">
+							{#each data.players as player (player.id)}
+								<tr class="border-b border-border/50 transition last:border-0 hover:bg-muted/30">
 									<td class="px-4 py-3 font-medium text-foreground">{player.name}</td>
-									<td class="px-4 py-3 text-right font-mono font-semibold {balanceColor(player.balance)}">
+									<td
+										class="px-4 py-3 text-right font-mono font-semibold {balanceColor(
+											player.balance
+										)}"
+									>
 										{formatBalance(player.balance)}
 									</td>
 									<td class="px-4 py-3 text-right">
@@ -230,11 +250,7 @@
 
 			<!-- ─── Stats ────────────────────────────────────────────────── -->
 			<div class="grid grid-cols-3 gap-3">
-				{#each [
-					{ label: 'Players', value: data.players.length },
-					{ label: 'Transactions', value: data.transactions.length },
-					{ label: 'Total chips in play', value: -data.players.reduce((acc, p) => acc + p.balance, 0) }
-				] as stat (stat)}
+				{#each stats as stat (stat.label)}
 					<div class="rounded-xl border border-border bg-card p-3 text-center">
 						<div class="font-mono text-xl font-bold text-foreground">{stat.value}</div>
 						<div class="mt-0.5 text-xs text-muted-foreground">{stat.label}</div>
@@ -250,7 +266,9 @@
 				<div class="overflow-hidden rounded-xl border border-border bg-card">
 					<table class="w-full text-sm">
 						<thead>
-							<tr class="border-b border-border text-xs font-medium uppercase tracking-wider text-muted-foreground">
+							<tr
+								class="border-b border-border text-xs font-medium tracking-wider text-muted-foreground uppercase"
+							>
 								<th class="px-4 py-3 text-left">Time</th>
 								<th class="px-4 py-3 text-left">Player</th>
 								<th class="px-4 py-3 text-left">Type</th>
@@ -259,14 +277,19 @@
 						</thead>
 						<tbody>
 							{#each recentTransactions as tx (tx.id)}
-								<tr class="border-b border-border/50 last:border-0 transition hover:bg-muted/30">
-									<td class="px-4 py-2.5 text-xs text-muted-foreground">{formatDate(tx.createdAt)}</td>
+								<tr class="border-b border-border/50 transition last:border-0 hover:bg-muted/30">
+									<td class="px-4 py-2.5 text-xs text-muted-foreground"
+										>{formatDate(tx.createdAt)}</td
+									>
 									<td class="px-4 py-2.5 font-medium text-foreground">{tx.playerName}</td>
 									<td class="px-4 py-2.5">
 										{#if tx.type === 'buyin'}
 											<Badge variant="destructive">Buy In</Badge>
 										{:else}
-											<Badge class="border-transparent bg-emerald-500/10 text-emerald-700 dark:text-emerald-400">Cash Out</Badge>
+											<Badge
+												class="border-transparent bg-emerald-500/10 text-emerald-700 dark:text-emerald-400"
+												>Cash Out</Badge
+											>
 										{/if}
 									</td>
 									<td class="px-4 py-2.5 text-right font-mono font-semibold">
@@ -304,9 +327,12 @@
 		<div class="space-y-4">
 			<!-- Type toggle -->
 			<div class="flex rounded-lg border border-border p-1">
-				{#each (['buyin', 'cashout'] as const) as t (t)}
+				{#each ['buyin', 'cashout'] as const as t (t)}
 					<button
-						onclick={() => { txType = t; txError = ''; }}
+						onclick={() => {
+							txType = t;
+							txError = '';
+						}}
 						class="flex-1 rounded-md py-1.5 text-sm font-medium transition {txType === t
 							? t === 'buyin'
 								? 'bg-destructive/10 text-destructive'
@@ -358,7 +384,7 @@
 			</Dialog.Close>
 			<Button
 				onclick={submitTransaction}
-				disabled={txSubmitting || !txAmount || parseInt(txAmount) <= 0}
+				disabled={txSubmitting || !txAmountValid}
 				class={txType === 'buyin'
 					? 'bg-destructive text-white hover:bg-destructive/90'
 					: 'bg-emerald-600 text-white hover:bg-emerald-600/90'}

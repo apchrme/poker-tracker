@@ -1,12 +1,12 @@
-import type { Handle } from '@sveltejs/kit';
-import { drizzle } from 'drizzle-orm/d1';
-import * as schema from './lib/server/db/schema';
+import { env } from 'cloudflare:workers';
+import type { Handle } from '@sveltejs/kit/hooks';
+import { createDb } from '#lib/server/db/index.js';
 
 export const handle: Handle = async ({ event, resolve }) => {
-	if (!event.platform?.env.DB) throw new Error('Database unavailable');
+	// Bindings come from wrangler.jsonc. adapter-cloudflare provides `cloudflare:workers` in dev too.
+	if (!env.DB) throw new Error('Database unavailable');
 
-	const db = drizzle(event.platform.env.DB, { schema });
-	event.locals.db = db;
+	event.locals.db = createDb(env.DB);
 
 	return resolve(event);
 };

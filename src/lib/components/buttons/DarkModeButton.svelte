@@ -3,8 +3,8 @@
 	import MoonIcon from '@lucide/svelte/icons/moon';
 
 	import { resetMode, setMode } from 'mode-watcher';
-	import * as DropdownMenu from '$lib/components/ui/dropdown-menu/index.js';
-	import { buttonVariants } from '$lib/components/ui/button/index.js';
+	import * as DropdownMenu from '#lib/components/ui/dropdown-menu/index.js';
+	import { buttonVariants } from '#lib/components/ui/button/index.js';
 </script>
 
 <DropdownMenu.Root>
@@ -17,7 +17,7 @@
 		/>
 		<span class="sr-only">Toggle theme</span>
 	</DropdownMenu.Trigger>
-	<DropdownMenu.Content align="end" class="w-20 min-w-none">
+	<DropdownMenu.Content align="end" class="min-w-none w-20">
 		<DropdownMenu.Item onclick={() => setMode('light')}>Light</DropdownMenu.Item>
 		<DropdownMenu.Item onclick={() => setMode('dark')}>Dark</DropdownMenu.Item>
 		<DropdownMenu.Item onclick={() => resetMode()}>System</DropdownMenu.Item>

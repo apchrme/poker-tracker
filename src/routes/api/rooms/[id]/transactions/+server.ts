@@ -1,42 +1,40 @@
-import { json, error } from '@sveltejs/kit';
+import { error, json } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
-import { transactions, players } from '$lib/server/db/schema';
-import { eq, sql } from 'drizzle-orm';
+import { and, eq, sql } from 'drizzle-orm';
+import { players, transactions } from '#lib/server/db/schema.js';
+import { readJsonBody } from '#lib/server/http.js';
+import { getActiveRoom } from '#lib/server/rooms.js';
 
 export const POST: RequestHandler = async ({ params, request, locals }) => {
-	const db = locals.db;
-	const { id } = params;
+	const { db } = locals;
+	const room = await getActiveRoom(db, params.id);
 
-	const room = await db.query.rooms.findFirst({ where: (r, { eq }) => eq(r.id, id) });
-	if (!room) throw error(404, 'Room not found');
-
-	const body: {playerId: string, type: string, amount: number} = await request.json();
-	const { playerId, type, amount } = body;
-
-	if (!playerId || typeof playerId !== 'number') throw error(400, 'Valid playerId required');
-	if (type !== 'buyin' && type !== 'cashout') throw error(400, 'Type must be buyin or cashout');
-	if (!amount || typeof amount !== 'number' || amount <= 0 || !Number.isInteger(amount)) {
-		throw error(400, 'Amount must be a positive integer');
+	const { playerId, type, amount } = await readJsonBody(request);
+	if (typeof playerId !== 'number' || !Number.isInteger(playerId)) {
+		error(400, 'Valid playerId required');
+	}
+	if (type !== 'buyin' && type !== 'cashout') error(400, 'Type must be buyin or cashout');
+	if (typeof amount !== 'number' || !Number.isSafeInteger(amount) || amount <= 0) {
+		error(400, 'Amount must be a positive integer');
 	}
 
 	const player = await db.query.players.findFirst({
-		where: (p, { eq, and }) => and(eq(p.id, playerId), eq(p.roomId, id))
+		where: and(eq(players.id, playerId), eq(players.roomId, room.id))
 	});
-	if (!player) throw error(404, 'Player not found in this room');
+	if (!player) error(404, 'Player not found in this room');
 
-	// Insert transaction and update player balance atomically
+	// Buy-ins put the player down, cash-outs bring them back up.
 	const balanceDelta = type === 'buyin' ? -amount : amount;
 
-	const [tx] = await db.insert(transactions).values({ roomId: id, playerId, type, amount }).returning();
+	// D1 has no interactive transactions; batch() runs both statements atomically.
+	const [[transaction], [updatedPlayer]] = await db.batch([
+		db.insert(transactions).values({ roomId: room.id, playerId, type, amount }).returning(),
+		db
+			.update(players)
+			.set({ balance: sql`${players.balance} + ${balanceDelta}` })
+			.where(eq(players.id, playerId))
+			.returning()
+	]);
 
-	await db
-		.update(players)
-		.set({ balance: sql`${players.balance} + ${balanceDelta}` })
-		.where(eq(players.id, playerId));
-
-	const updatedPlayer = await db.query.players.findFirst({
-		where: (p, { eq }) => eq(p.id, playerId)
-	});
-
-	return json({ transaction: tx, player: updatedPlayer }, { status: 201 });
+	return json({ transaction, player: updatedPlayer }, { status: 201 });
 };

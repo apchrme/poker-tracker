@@ -1,20 +1,11 @@
 // See https://svelte.dev/docs/kit/types#app.d.ts
 // for information about these interfaces
-import type { DrizzleD1Database } from 'drizzle-orm/d1';
-import type { user, session } from '$lib/server/db/schema';
-import type { InferSelectModel } from 'drizzle-orm';
+import type { Db } from '#lib/server/db/index.js';
 
 declare global {
 	namespace App {
 		interface Locals {
-			db: DrizzleD1Database;
-			user: InferSelectModel<typeof user> | null;
-			session: InferSelectModel<typeof session> | null;
-		}
-		interface Platform {
-			env: Env;
-			cf: CfProperties;
-			ctx: ExecutionContext;
+			db: Db;
 		}
 	}
 }

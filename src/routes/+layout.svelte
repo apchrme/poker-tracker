@@ -7,5 +7,5 @@
 
 <ModeWatcher />
 <div class="px-2">
-{@render children()}
+	{@render children()}
 </div>

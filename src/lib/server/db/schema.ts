@@ -2,7 +2,7 @@ import { sql } from 'drizzle-orm';
 import { integer, sqliteTable, text } from 'drizzle-orm/sqlite-core';
 
 export const rooms = sqliteTable('rooms', {
-	id: text('id').primaryKey(), // 6-char alphanumeric
+	id: text('id').primaryKey(), // 4-char uppercase room code, see api/rooms/+server.ts
 	createdAt: integer('created_at', { mode: 'timestamp' })
 		.notNull()
 		.default(sql`(unixepoch())`)
@@ -14,6 +14,7 @@ export const players = sqliteTable('players', {
 		.notNull()
 		.references(() => rooms.id, { onDelete: 'cascade' }),
 	name: text('name').notNull(),
+	// Denormalised sum of the player's transactions: cash-outs minus buy-ins.
 	balance: integer('balance').notNull().default(0),
 	createdAt: integer('created_at', { mode: 'timestamp' })
 		.notNull()
