@@ -8,6 +8,20 @@
       "when": 1781088052241,
       "tag": "0000_great_living_lightning",
       "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "6",
+      "when": 1792670108511,
+      "tag": "0001_room_conversion_rate",
+      "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "6",
+      "when": 1792671020290,
+      "tag": "0002_room_version",
+      "breakpoints": true
     }
   ]
 }

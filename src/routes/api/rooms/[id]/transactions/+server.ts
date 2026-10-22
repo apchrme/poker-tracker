@@ -3,7 +3,7 @@ import type { RequestHandler } from './$types';
 import { and, eq, sql } from 'drizzle-orm';
 import { players, transactions } from '#lib/server/db/schema.js';
 import { readJsonBody } from '#lib/server/http.js';
-import { getActiveRoom } from '#lib/server/rooms.js';
+import { bumpRoomVersion, getActiveRoom } from '#lib/server/rooms.js';
 
 export const POST: RequestHandler = async ({ params, request, locals }) => {
 	const { db } = locals;
@@ -26,14 +26,15 @@ export const POST: RequestHandler = async ({ params, request, locals }) => {
 	// Buy-ins put the player down, cash-outs bring them back up.
 	const balanceDelta = type === 'buyin' ? -amount : amount;
 
-	// D1 has no interactive transactions; batch() runs both statements atomically.
+	// D1 has no interactive transactions; batch() runs the statements atomically.
 	const [[transaction], [updatedPlayer]] = await db.batch([
 		db.insert(transactions).values({ roomId: room.id, playerId, type, amount }).returning(),
 		db
 			.update(players)
 			.set({ balance: sql`${players.balance} + ${balanceDelta}` })
 			.where(eq(players.id, playerId))
-			.returning()
+			.returning(),
+		bumpRoomVersion(db, room.id)
 	]);
 
 	return json({ transaction, player: updatedPlayer }, { status: 201 });

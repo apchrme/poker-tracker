@@ -1,5 +1,5 @@
 import { error } from '@sveltejs/kit';
-import { eq, lte } from 'drizzle-orm';
+import { eq, lte, sql } from 'drizzle-orm';
 import type { Db } from './db';
 import { rooms, type Room } from './db/schema';
 
@@ -25,6 +25,17 @@ export async function getActiveRoom(db: Db, code: string): Promise<Room> {
 	}
 
 	return room;
+}
+
+/**
+ * Statement that marks a room as changed so other viewers re-sync. Run it in the same
+ * db.batch() as the change itself so the two are atomic.
+ */
+export function bumpRoomVersion(db: Db, roomId: string) {
+	return db
+		.update(rooms)
+		.set({ version: sql`${rooms.version} + 1` })
+		.where(eq(rooms.id, roomId));
 }
 
 /** Delete every expired room, freeing its code for reuse. */

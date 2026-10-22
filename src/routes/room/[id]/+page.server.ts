@@ -1,9 +1,10 @@
 import { desc, eq } from 'drizzle-orm';
 import type { PageServerLoad } from './$types';
+import { DISPLAY_UNIT_COOKIE, parseUnit } from '#lib/currency.js';
 import { players, transactions } from '#lib/server/db/schema.js';
 import { getActiveRoom, roomExpiresAt } from '#lib/server/rooms.js';
 
-export const load: PageServerLoad = async ({ params, locals }) => {
+export const load: PageServerLoad = async ({ params, locals, cookies }) => {
 	const { db } = locals;
 	const room = await getActiveRoom(db, params.id);
 
@@ -29,6 +30,7 @@ export const load: PageServerLoad = async ({ params, locals }) => {
 	return {
 		room: { ...room, expiresAt: roomExpiresAt(room) },
 		players: roomPlayers,
-		transactions: roomTransactions
+		transactions: roomTransactions,
+		displayUnit: parseUnit(cookies.get(DISPLAY_UNIT_COOKIE))
 	};
 };

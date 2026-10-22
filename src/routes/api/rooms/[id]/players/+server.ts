@@ -2,7 +2,7 @@ import { error, json } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
 import { players } from '#lib/server/db/schema.js';
 import { readJsonBody } from '#lib/server/http.js';
-import { getActiveRoom } from '#lib/server/rooms.js';
+import { bumpRoomVersion, getActiveRoom } from '#lib/server/rooms.js';
 
 const MAX_NAME_LENGTH = 50;
 
@@ -15,7 +15,10 @@ export const POST: RequestHandler = async ({ params, request, locals }) => {
 	if (!name) error(400, 'Player name is required');
 	if (name.length > MAX_NAME_LENGTH) error(400, 'Player name too long');
 
-	const [player] = await db.insert(players).values({ roomId: room.id, name }).returning();
+	const [[player]] = await db.batch([
+		db.insert(players).values({ roomId: room.id, name }).returning(),
+		bumpRoomVersion(db, room.id)
+	]);
 
 	return json(player, { status: 201 });
 };

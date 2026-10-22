@@ -3,6 +3,11 @@ import { integer, sqliteTable, text } from 'drizzle-orm/sqlite-core';
 
 export const rooms = sqliteTable('rooms', {
 	id: text('id').primaryKey(), // 4-char uppercase room code, see api/rooms/+server.ts
+	// Conversion rate: `rateChips` chips are worth `rateCents` cents. Both null until configured.
+	rateChips: integer('rate_chips'),
+	rateCents: integer('rate_cents'),
+	// Bumped by every change to the room's data; viewers poll it to know when to re-sync.
+	version: integer('version').notNull().default(0),
 	createdAt: integer('created_at', { mode: 'timestamp' })
 		.notNull()
 		.default(sql`(unixepoch())`)
